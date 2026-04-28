@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Sorting Visualizer Final</title>
+
+<style>
+body {
+  margin:0;
+  font-family:'Segoe UI';
+  background:#0f172a;
+  color:white;
+  text-align:center;
+}
+
+.controls { margin:15px; }
+
+input, button, select {
+  margin:5px;
+  padding:10px;
+  border-radius:8px;
+}
+
+#graphs {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:20px;
+}
+
+.graph { width:90%; }
+
+.array {
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  height:300px;
+}
+
+.bar-container {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  margin:3px;
+}
+
+.bar-value {
+  font-size:12px;
+  margin-bottom:4px;
+}
+
+.bar { width:25px; }
+
+.unsorted { background:#94a3b8; }
+.comparing { background:#ef4444; }
+.sorted { background:#22c55e; }
+
+.message {
+  margin:10px;
+  font-weight:bold;
+  color:#22c55e;
+}
+
+/* Time Complexity Box */
+.stats {
+  margin:10px auto;
+  padding:10px 15px;
+  width:fit-content;
+  font-size:16px;
+  font-weight:bold;
+  color:#facc15;
+  background:rgba(250,204,21,0.1);
+  border:1px solid #facc15;
+  border-radius:10px;
+}
+
+/* Legend */
+.legend {
+  margin-top:10px;
+}
+.legend span {
+  margin:5px;
+  padding:5px 10px;
+  border-radius:6px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>🚀 Sorting Visualizer</h2>
+
+<div class="controls">
+
+<button onclick="generateArray()">🎲 Random</button>
+
+<input id="inputArray" placeholder="5,3,8,1">
+<button onclick="setUserArray()">Set</button>
+
+<br>
+
+<select id="mode">
+  <option value="single">Single</option>
+  <option value="multi">Multiple</option>
+</select>
+
+<select id="algo">
+  <option value="bubble">Bubble Sort</option>
+  <option value="selection">Selection Sort</option>
+  <option value="insertion">Insertion Sort</option>
+</select>
+
+<select id="order">
+  <option value="asc">Ascending</option>
+  <option value="desc">Descending</option>
+</select>
+
+<br>
+
+<button onclick="start()">▶ Start</button>
+<button onclick="pause()">⏸ Pause</button>
+<button onclick="prev()">⏮ Prev</button>
+<button onclick="next()">⏭ Next</button>
+
+<br>
+
+Speed:
+<input type="range" id="speed" min="50" max="500" value="200">
+
+<div class="legend">
+  <span style="background:#22c55e">Sorted</span>
+  <span style="background:#ef4444">Comparing</span>
+  <span style="background:#94a3b8">Unsorted</span>
+</div>
+
+</div>
+
+<div id="graphs"></div>
+
+<script>
+
+let arr=[];
+let steps=[];
+let currentStep=0;
+let running=false;
+let paused=false;
+let container;
+
+const names={
+  bubble:"Bubble Sort",
+  selection:"Selection Sort",
+  insertion:"Insertion Sort"
+};
+
+const complexity={
+  bubble:"⏱ Best: O(n) | Average: O(n²) | Worst: O(n²)",
+  selection:"⏱ Best: O(n²) | Average: O(n²) | Worst: O(n²)",
+  insertion:"⏱ Best: O(n) | Average: O(n²) | Worst: O(n²)"
+};
+
+/* Generate */
+function generateArray(){
+  arr=Array.from({length:10},()=>Math.floor(Math.random()*500)+10);
+}
+
+/* Input */
+function setUserArray(){
+  arr=document.getElementById("inputArray").value.split(",").map(Number);
+}
+
+/* ✅ FIXED DRAW FUNCTION (SCALED HEIGHT) */
+function draw(container,array,colors){
+  container.innerHTML="";
+
+  let maxVal = Math.max(...array);
+
+  array.forEach((val,i)=>{
+    let wrap=document.createElement("div");
+    wrap.className="bar-container";
+
+    let value=document.createElement("div");
+    value.className="bar-value";
+    value.innerText=val;
+
+    let bar=document.createElement("div");
+    bar.className="bar "+(colors[i]||"unsorted");
+
+    let height = (val / maxVal) * 250; // 🔥 scaled height
+    bar.style.height = height + "px";
+
+    wrap.appendChild(value);
+    wrap.appendChild(bar);
+    container.appendChild(wrap);
+  });
+}
+
+/* Bubble Steps */
+function bubbleSteps(a){
+  let s=[], arr=[...a];
+  let order=document.getElementById("order").value;
+
+  for(let i=0;i<arr.length;i++){
+    for(let j=0;j<arr.length-i-1;j++){
+
+      let colors=new Array(arr.length).fill("unsorted");
+      colors[j]="comparing"; colors[j+1]="comparing";
+
+      let condition = order==="asc"
+        ? arr[j] > arr[j+1]
+        : arr[j] < arr[j+1];
+
+      if(condition){
+        [arr[j],arr[j+1]]=[arr[j+1],arr[j]];
+      }
+
+      s.push({arr:[...arr],colors});
+    }
+  }
+
+  s.push({arr:[...arr],colors:new Array(arr.length).fill("sorted")});
+  return s;
+}
+
+function getSteps(){
+  return bubbleSteps(arr);
+}
+
+/* Start */
+function start(){
+  running=true;
+  paused=false;
+
+  let mode=document.getElementById("mode").value;
+  let algo=document.getElementById("algo").value;
+
+  if(mode==="single"){
+    runSingle(algo);
+  } else {
+    runMulti();
+  }
+}
+
+/* Single */
+function runSingle(algo){
+  let graphs=document.getElementById("graphs");
+  graphs.innerHTML="";
+
+  let div=document.createElement("div");
+  div.className="graph";
+  div.innerHTML=`
+    <div class="message" id="msg"></div>
+    <h3>${names[algo]}</h3>
+    <div class="stats">${complexity[algo]}</div>
+    <div class="array"></div>
+  `;
+  graphs.appendChild(div);
+
+  container=div.querySelector(".array");
+  steps=getSteps();
+  currentStep=0;
+
+  animate(()=>{
+    document.getElementById("msg").innerText =
+      "✅ " + names[algo] + " completed successfully";
+  });
+}
+
+/* Multi */
+function runMulti(){
+  let graphs=document.getElementById("graphs");
+  graphs.innerHTML="";
+
+  let algos=["bubble","selection","insertion"];
+
+  function runNext(i){
+    if(i>=algos.length) return;
+
+    let a=algos[i];
+
+    let div=document.createElement("div");
+    div.className="graph";
+    div.innerHTML=`
+      <div class="message" id="msg${i}"></div>
+      <h3>${names[a]}</h3>
+      <div class="stats">${complexity[a]}</div>
+      <div class="array"></div>
+    `;
+    graphs.appendChild(div);
+
+    container=div.querySelector(".array");
+    steps=getSteps();
+    currentStep=0;
+
+    animate(()=>{
+      document.getElementById("msg"+i).innerText =
+        "✅ " + names[a] + " completed successfully";
+
+      runNext(i+1);
+    });
+  }
+
+  runNext(0);
+}
+
+/* Animate */
+function animate(callback){
+  function step(){
+    if(!running || paused) return;
+
+    if(currentStep>=steps.length){
+      if(callback) callback();
+      return;
+    }
+
+    draw(container,steps[currentStep].arr,steps[currentStep].colors);
+    currentStep++;
+
+    setTimeout(step, document.getElementById("speed").value);
+  }
+  step();
+}
+
+/* Controls */
+function pause(){ paused=true; }
+
+function next(){
+  paused=true;
+  if(currentStep<steps.length){
+    draw(container,steps[currentStep].arr,steps[currentStep].colors);
+    currentStep++;
+  }
+}
+
+function prev(){
+  paused=true;
+  if(currentStep>0){
+    currentStep--;
+    draw(container,steps[currentStep].arr,steps[currentStep].colors);
+  }
+}
+
+/* Init */
+generateArray();
+
+</script>
+
+</body>
+</html>
